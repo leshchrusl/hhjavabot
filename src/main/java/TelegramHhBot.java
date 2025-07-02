@@ -36,6 +36,12 @@ public class TelegramHhBot extends TelegramLongPollingBot {
     private static final String RESUME_ID = "a72a20edff0eecae160039ed1f464336753277";
     // Ваш chat_id в Telegram для отправки уведомлений
     private static final long CHAT_ID = 631391338;
+    // Файл, в котором храним актуальные access и refresh токены
+    private static final String TOKENS_FILE = "tokens.json";
+
+    // Текущие значения токенов
+    private String accessToken;
+    private String refreshToken;
 
     // HttpClient для выполнения HTTP-запросов
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -55,6 +61,7 @@ public class TelegramHhBot extends TelegramLongPollingBot {
                 // Создаем таблицу sent, если её нет. В ней храним ID вакансий
                 stmt.execute("CREATE TABLE IF NOT EXISTS sent (vacancy_id TEXT PRIMARY KEY)");
             }
+            loadTokens();
         } catch (SQLException e) {
             // Логируем ошибку подключения или создания таблицы
             e.printStackTrace();
@@ -158,25 +165,31 @@ public class TelegramHhBot extends TelegramLongPollingBot {
     }
 
     /**
-     * Получает OAuth-токен от hh.ru по client_credentials flow.
-     * @return access_token для дальнейших запросов
+     * Получает OAuth-токен hh.ru, используя сохранённый refresh_token.
+     * Для работы необходимо один раз получить refresh_token по authorization code flow
+     * и сохранить его в файл tokens.json.
+     *
+     * После каждого обновления новая пара токенов сохраняется в файл.
      */
     private String fetchOAuthToken() throws IOException, InterruptedException {
-        // Формируем тело запроса
+        if (refreshToken == null) {
+            throw new IllegalStateException("Refresh token not found. Create tokens.json with refresh_token");
+        }
         String body = String.format(
-                "grant_type=client_credentials&client_id=%s&client_secret=%s",
-                HH_CLIENT_ID, HH_CLIENT_SECRET
+                "grant_type=refresh_token&refresh_token=%s&client_id=%s&client_secret=%s",
+                refreshToken, HH_CLIENT_ID, HH_CLIENT_SECRET
         );
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://hh.ru/oauth/token"))
+                .uri(URI.create("https://api.hh.ru/token"))
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
-        // Выполняем запрос и получаем ответ в виде строки
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         JsonNode json = objectMapper.readTree(response.body());
-        // Извлекаем поле access_token
-        return json.get("access_token").asText();
+        accessToken = json.get("access_token").asText();
+        refreshToken = json.get("refresh_token").asText();
+        saveTokens();
+        return accessToken;
     }
 
     /**
@@ -218,7 +231,7 @@ public class TelegramHhBot extends TelegramLongPollingBot {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + token)
-                .header("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com")
+                .header("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com)")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
@@ -247,6 +260,41 @@ public class TelegramHhBot extends TelegramLongPollingBot {
         try (PreparedStatement ps = dbConnection.prepareStatement(sql)) {
             ps.setString(1, vacancyId);
             ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Загружает сохранённые access и refresh токены из файла.
+     */
+    private void loadTokens() {
+        try {
+            java.nio.file.Path path = java.nio.file.Paths.get(TOKENS_FILE);
+            if (java.nio.file.Files.exists(path)) {
+                JsonNode node = objectMapper.readTree(java.nio.file.Files.readString(path));
+                accessToken = node.path("access_token").asText(null);
+                refreshToken = node.path("refresh_token").asText(null);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Сохраняет текущие access и refresh токены в файл.
+     */
+    private void saveTokens() {
+        try {
+            com.fasterxml.jackson.databind.node.ObjectNode node = objectMapper.createObjectNode();
+            node.put("access_token", accessToken);
+            node.put("refresh_token", refreshToken);
+            java.nio.file.Files.writeString(
+                    java.nio.file.Paths.get(TOKENS_FILE),
+                    node.toPrettyString(),
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING
+            );
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
