@@ -217,8 +217,8 @@ public class TelegramHhBot extends TelegramLongPollingBot {
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
         // Составляем URL с параметрами поиска
         String url = String.format(
-                "https://api.hh.ru/vacancies?text=%s&search_field=name&area=%d&per_page=20&date_from=%s",
-                "Java", 2, dateFrom
+                "https://api.hh.ru/vacancies?text=%s&search_field=name&area=%d&",
+                "Java", 2
         );
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
