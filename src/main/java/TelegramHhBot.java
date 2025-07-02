@@ -186,8 +186,16 @@ public class TelegramHhBot extends TelegramLongPollingBot {
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         JsonNode json = objectMapper.readTree(response.body());
-        accessToken = json.get("access_token").asText();
-        refreshToken = json.get("refresh_token").asText();
+
+        final JsonNode accessTokenNode = json.get("access_token");
+        final JsonNode refreshTokenNode = json.get("refresh_token");
+
+        if (accessTokenNode != null) {
+            accessToken = accessTokenNode.asText();
+        }
+        if (refreshTokenNode != null) {
+            refreshToken = refreshTokenNode.asText();
+        }
         saveTokens();
         return accessToken;
     }
@@ -227,12 +235,12 @@ public class TelegramHhBot extends TelegramLongPollingBot {
     private boolean sendApplication(String vacancyId, String token) throws IOException, InterruptedException {
         String url = "https://api.hh.ru/negotiations";
         // Формируем JSON с указанием resume
-        String body = String.format("{\"resume_id\": \"%s\", \"vacancy_id\": \"%s\"}", RESUME_ID, vacancyId);
+        String body = String.format("{\"vacancy_id\": \"%s\", \"resume_id\": \"%s\"}", vacancyId, RESUME_ID);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + token)
                 .header("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com)")
-                .header("Content-Type", "application/json")
+                .header("Content-Type", "multipart/form-data")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

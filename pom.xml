@@ -15,6 +15,18 @@
       <version>6.6.0</version>
     </dependency>
 
+    <!-- Для отправки формы multipart/form-data -->
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>4.5.13</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpmime</artifactId>
+      <version>4.5.13</version>
+    </dependency>
+
     <!-- Jackson для JSON -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
