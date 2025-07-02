@@ -1,5 +1,10 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -212,8 +217,8 @@ public class TelegramHhBot extends TelegramLongPollingBot {
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
         // Составляем URL с параметрами поиска
         String url = String.format(
-                "https://api.hh.ru/vacancies?text=%s&area=%d&per_page=20&date_from=%s",
-                "Java+разработчик", 2, dateFrom
+                "https://api.hh.ru/vacancies?text=%s&search_field=name&area=%d&per_page=20&date_from=%s",
+                "Java", 2, dateFrom
         );
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -233,19 +238,37 @@ public class TelegramHhBot extends TelegramLongPollingBot {
      * @return true, если статус ответа 200 или 201
      */
     private boolean sendApplication(String vacancyId, String token) throws IOException, InterruptedException {
+//        String url = "https://api.hh.ru/negotiations";
+//        // Формируем JSON с указанием resume
+//        String body = String.format("{\"vacancy_id\": \"%s\", \"resume_id\": \"%s\"}", vacancyId, RESUME_ID);
+//        HttpRequest request = HttpRequest.newBuilder()
+//                .uri(URI.create(url))
+//                .header("Authorization", "Bearer " + token)
+//                .header("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com)")
+//                .header("Content-Type", "multipart/form-data")
+//                .POST(HttpRequest.BodyPublishers.ofString(body))
+//                .build();
+//        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+//        int status = response.statusCode();
+//        return status == 200 || status == 201;
+
         String url = "https://api.hh.ru/negotiations";
-        // Формируем JSON с указанием resume
-        String body = String.format("{\"vacancy_id\": \"%s\", \"resume_id\": \"%s\"}", vacancyId, RESUME_ID);
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Bearer " + token)
-                .header("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com)")
-                .header("Content-Type", "multipart/form-data")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        int status = response.statusCode();
-        return status == 200 || status == 201;
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            HttpPost post = new HttpPost(url);
+            post.setHeader("Authorization", "Bearer " + token);
+            post.setHeader("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com)");
+
+            var builder = MultipartEntityBuilder.create();
+            builder.addTextBody("vacancy_id", vacancyId);
+            builder.addTextBody("resume_id", RESUME_ID);
+
+            post.setEntity(builder.build());
+
+            try (CloseableHttpResponse response = client.execute(post)) {
+                int status = response.getStatusLine().getStatusCode();
+                return status == 200 || status == 201;
+            }
+        }
     }
 
     /**
