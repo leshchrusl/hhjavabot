@@ -6,6 +6,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -170,7 +171,7 @@ public class TelegramHhBot extends TelegramLongPollingBot {
                 } catch (Exception e) {
                    logger.info(e.getMessage());
                 }
-                Thread.sleep(1000); // Задержка между запросами, чтобы не перегружать API
+                Thread.sleep(30000); // Задержка между запросами, чтобы не перегружать API
             }
             System.out.printf("Отправлено %d новых откликов\n", count);
         } catch (Exception e) {
@@ -273,7 +274,8 @@ public class TelegramHhBot extends TelegramLongPollingBot {
 
             try (CloseableHttpResponse response = client.execute(post)) {
                 int status = response.getStatusLine().getStatusCode();
-                logger.info("vacancy id: {} Status code: {}", vacancyId, status);
+                logger.info("vacancy id: {} Status code: {}  Message: {}", vacancyId, status
+                        , EntityUtils.toString(response.getEntity()));
                 return status == 200 || status == 201;
             }
         }
