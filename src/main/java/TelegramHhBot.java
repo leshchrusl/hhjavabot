@@ -1,5 +1,6 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
@@ -169,6 +170,7 @@ public class TelegramHhBot extends TelegramLongPollingBot {
                 } catch (Exception e) {
                    logger.info(e.getMessage());
                 }
+                Thread.sleep(1000); // Задержка между запросами, чтобы не перегружать API
             }
             System.out.printf("Отправлено %d новых откликов\n", count);
         } catch (Exception e) {
@@ -219,24 +221,34 @@ public class TelegramHhBot extends TelegramLongPollingBot {
      * @return массив JSON-объектов вакансий
      */
     private JsonNode fetchVacancies(String token) throws IOException, InterruptedException {
-        // Форматируем дату начала дня в нужном формате
-        String dateFrom = ZonedDateTime.now()
-                .truncatedTo(ChronoUnit.DAYS)
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
-        // Составляем URL с параметрами поиска
-        String url = String.format(
-                "https://api.hh.ru/vacancies?text=%s&search_field=name&area=%d&",
-                "Java", 2
-        );
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Authorization", "Bearer " + token)
-                .GET()
-                .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        JsonNode json = objectMapper.readTree(response.body());
-        // Возвращаем массив items
-        return json.get("items");
+        ArrayNode all = objectMapper.createArrayNode();
+        int page = 0;
+        while (true) {
+            String url = String.format(
+                    "https://api.hh.ru/vacancies?text=%s&search_field=name&area=%d&per_page=20" +
+                            "&page=%d", "Java", 2, page);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Authorization", "Bearer " + token)
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonNode root = objectMapper.readTree(response.body());
+
+            ArrayNode items = (ArrayNode) root.path("items");
+            if (items.isEmpty()) {
+                break;                         // вакансий больше нет
+            }
+            all.addAll(items);
+
+            int currentPage = root.path("page").asInt();
+            int totalPages = root.path("pages").asInt();
+            if (currentPage >= totalPages - 1) {
+                break;                         // достигли последней страницы
+            }
+            page++;                             // запрашиваем следующую страницу
+        }
+        return all;
     }
 
     /**
@@ -261,6 +273,7 @@ public class TelegramHhBot extends TelegramLongPollingBot {
 
             try (CloseableHttpResponse response = client.execute(post)) {
                 int status = response.getStatusLine().getStatusCode();
+                logger.info("vacancy id: {} Status code: {}", vacancyId, status);
                 return status == 200 || status == 201;
             }
         }
