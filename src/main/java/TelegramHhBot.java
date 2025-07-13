@@ -5,6 +5,8 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -54,6 +56,8 @@ public class TelegramHhBot extends TelegramLongPollingBot {
     private final ObjectMapper objectMapper = new ObjectMapper();
     // Подключение к SQLite для хранения уже отправленных откликов
     private Connection dbConnection;
+    private static final Logger logger = LoggerFactory.getLogger(TelegramHhBot.class);
+    // ========== КОНЕЦ КОНФИГУРАЦИИ ==========
 
     /**
      * Конструктор: создаёт или открывает SQLite-базу и таблицу для sent.
@@ -141,25 +145,29 @@ public class TelegramHhBot extends TelegramLongPollingBot {
             // Шаг 3: для каждой вакансии проверяем — отправлен ли уже отклик
             for (JsonNode v : items) {
                 String vacancyId = v.get("id").asText();
-                if (!isSent(vacancyId)) {
-                    // Если нет, пробуем отправить отклик
-                    boolean ok = sendApplication(vacancyId, token);
-                    if (ok) {
-                        // Записываем в базу, чтобы не повторяться
-                        markSent(vacancyId);
-                        count++;
-                        // Формируем текст уведомления
-                        String msgText = String.format(
-                                "✅ Отклик отправлен: %s\n" +
-                                        "Компания: %s\n" +
-                                        "Ссылка: %s",
-                                v.get("name").asText(),
-                                v.get("employer").get("name").asText(),
-                                v.get("alternate_url").asText()
-                        );
-                        // Отправляем уведомление в Telegram
-                        sendTelegramMessage(msgText);
+                try {
+                    if (!isSent(vacancyId)) {
+                        // Если нет, пробуем отправить отклик
+                        boolean ok = sendApplication(vacancyId, token);
+                        if (ok) {
+                            // Записываем в базу, чтобы не повторяться
+                            markSent(vacancyId);
+                            count++;
+                            // Формируем текст уведомления
+                            String msgText = String.format(
+                                    "✅ Отклик отправлен: %s\n" +
+                                            "Компания: %s\n" +
+                                            "Ссылка: %s",
+                                    v.get("name").asText(),
+                                    v.get("employer").get("name").asText(),
+                                    v.get("alternate_url").asText()
+                            );
+                            // Отправляем уведомление в Telegram
+                            sendTelegramMessage(msgText);
+                        }
                     }
+                } catch (Exception e) {
+                   logger.info(e.getMessage());
                 }
             }
             System.out.printf("Отправлено %d новых откликов\n", count);
@@ -238,19 +246,6 @@ public class TelegramHhBot extends TelegramLongPollingBot {
      * @return true, если статус ответа 200 или 201
      */
     private boolean sendApplication(String vacancyId, String token) throws IOException, InterruptedException {
-//        String url = "https://api.hh.ru/negotiations";
-//        // Формируем JSON с указанием resume
-//        String body = String.format("{\"vacancy_id\": \"%s\", \"resume_id\": \"%s\"}", vacancyId, RESUME_ID);
-//        HttpRequest request = HttpRequest.newBuilder()
-//                .uri(URI.create(url))
-//                .header("Authorization", "Bearer " + token)
-//                .header("User-Agent", "HHJavaBot/1.0 (leshchinskyruslan@gmail.com)")
-//                .header("Content-Type", "multipart/form-data")
-//                .POST(HttpRequest.BodyPublishers.ofString(body))
-//                .build();
-//        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-//        int status = response.statusCode();
-//        return status == 200 || status == 201;
 
         String url = "https://api.hh.ru/negotiations";
         try (CloseableHttpClient client = HttpClients.createDefault()) {
@@ -347,6 +342,7 @@ public class TelegramHhBot extends TelegramLongPollingBot {
      * Точка входа в приложение: регистрируем бота и запускаем планировщик.
      */
     public static void main(String[] args) throws Exception {
+        logger.info("Запуск TelegramHhBot...");
         // Инициализация API Telegram
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
         // Создаём экземпляр бота
